@@ -1,0 +1,16 @@
+{
+  "event_id": "bc89fa6e890c4fb98ad16e88fa765fe1",
+  "timestamp": "2026-06-11T21:48:30Z",
+  "error_type": "LogicBugAlert",
+  "message": "User registration behavior anomaly: registration endpoint fails validation for all new emails with duplicate error.",
+  "file_path": "buggy_app/services/users.py",
+  "line_number": 16,
+  "function_name": "is_email_taken",
+  "stack_trace": "Non-crashing anomaly alert.\nReported symptoms: Users cannot sign up with any new email. Endpoint POST /users returns 400 Bad Request: 'Email is already registered'.\nInvestigation point: check duplicate email checks and list iteration validation in services/users.py.",
+  "context": {
+    "attempted_registration": {
+      "username": "newuser",
+      "email": "newuser@example.com"
+    }
+  }
+}

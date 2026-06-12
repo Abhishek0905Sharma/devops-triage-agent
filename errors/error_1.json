@@ -1,0 +1,17 @@
+{
+  "event_id": "8c0a8cf5c6354b9d99723be6ea684d0b",
+  "timestamp": "2026-06-11T21:45:00Z",
+  "error_type": "NameError",
+  "message": "name 'updted_user' is not defined",
+  "file_path": "buggy_app/services/users.py",
+  "line_number": 50,
+  "function_name": "update_user",
+  "stack_trace": "Traceback (most recent call last):\n  File \"buggy_app/routers/users.py\", line 38, in update_user\n    updated_user = user_service.update_user(user_id, update_data)\n  File \"buggy_app/services/users.py\", line 50, in update_user\n    return updted_user\nNameError: name 'updted_user' is not defined",
+  "context": {
+    "user_id": 1,
+    "update_data": {
+      "username": "alice_updated",
+      "email": "alice@example.com"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "event_id": "f516a22f7b884d0590a3ea1496a7efcc",
+  "timestamp": "2026-06-11T21:46:12Z",
+  "error_type": "AttributeError",
+  "message": "'NoneType' object has no attribute 'bio'",
+  "file_path": "buggy_app/routers/users.py",
+  "line_number": 28,
+  "function_name": "get_user_bio",
+  "stack_trace": "Traceback (most recent call last):\n  File \"fastapi/routing.py\", line 226, in run_endpoint_function\n    response = await run_in_threadpool(dependant.call, **values)\n  File \"buggy_app/routers/users.py\", line 28, in get_user_bio\n    return {\"username\": user.username, \"bio\": user.profile.bio}\nAttributeError: 'NoneType' object has no attribute 'bio'",
+  "context": {
+    "user_id": 2
+  }
+}
