@@ -123,6 +123,18 @@ python triage.py --error errors/error_3.json
 
 ---
 
+## Live Demo
+
+The buggy FastAPI application is deployed and hosted publicly on Railway. You can access and test the API using the following links:
+
+* **API Base URL**: [https://devops-triage-agent-production.up.railway.app](https://devops-triage-agent-production.up.railway.app)
+* **Interactive API Documentation (Swagger UI)**: [https://devops-triage-agent-production.up.railway.app/docs](https://devops-triage-agent-production.up.railway.app/docs)
+* **API Endpoints**:
+  * `GET /users`: Lists all users.
+  * `GET /users/2/bio`: Returns profile bio. *Note: Accessing this endpoint triggers Bug 2 (missing null check on profile) and returns a `500 Internal Server Error` (AttributeError).*
+
+---
+
 ## Agent Limitations
 The DevOps Incident Triage Agent is built with safety constraints to prevent unintended alterations to codebases.
 
