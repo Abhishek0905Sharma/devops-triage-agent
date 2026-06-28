@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DevOps Triage Agent</title>
+<meta name="description" content="AI-powered incident triage: automatically investigates code errors and proposes fixes or triage reports." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ── Reset & tokens ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #0d1117;
+    --panel:     #161b22;
+    --panel2:    #1c2128;
+    --border:    #30363d;
+    --accent:    #238636;
+    --accent-h:  #2ea043;
+    --text:      #e6edf3;
+    --text2:     #8b949e;
+    --red:       #f85149;
+    --yellow:    #d29922;
+    --blue:      #388bfd;
+    --cyan:      #39c5cf;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+    --radius:    8px;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  /* ── Scrollbar ───────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Navbar ──────────────────────────────────────────────────── */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 56px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.3px;
+    user-select: none;
+  }
+  .nav-logo svg { color: var(--accent); }
+  .nav-right { display: flex; align-items: center; gap: 16px; }
+  .status-dot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text2);
+    font-weight: 500;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .4; }
+  }
+  .btn-gh {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color .2s, background .2s;
+  }
+  .btn-gh:hover { border-color: var(--text2); background: var(--panel2); }
+
+  /* ── Main grid ────────────────────────────────────────────────── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    gap: 0;
+    min-height: 0;
+  }
+
+  /* ── Panel shared ────────────────────────────────────────────── */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--text2);
+  }
+  .panel-body { padding: 20px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── Left panel ───────────────────────────────────────────────── */
+  .preset-grid { display: grid; gap: 8px; }
+  .preset-btn {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel2);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: border-color .2s, background .2s, transform .1s;
+    position: relative;
+    overflow: hidden;
+  }
+  .preset-btn::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+  }
+  .preset-btn.red::before   { background: var(--red); }
+  .preset-btn.yellow::before { background: var(--yellow); }
+  .preset-btn.blue::before  { background: var(--blue); }
+  .preset-btn:hover { border-color: var(--text2); background: #21262d; transform: translateX(2px); }
+  .preset-btn.active { border-color: var(--accent); background: #0f2d1a; }
+  .preset-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .tag-red    { background: rgba(248,81,73,.15);  color: var(--red);    }
+  .tag-yellow { background: rgba(210,153,34,.15); color: var(--yellow); }
+  .tag-blue   { background: rgba(56,139,253,.15); color: var(--blue);   }
+
+  label { font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 4px; display: block; }
+  textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 220px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  textarea:focus { border-color: var(--accent); }
+
+  .btn-run {
+    width: 100%;
+    padding: 13px;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    color: #fff;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background .2s, transform .1s;
+    letter-spacing: .2px;
+  }
+  .btn-run:hover:not(:disabled) { background: var(--accent-h); transform: translateY(-1px); }
+  .btn-run:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  /* ── Right panel ──────────────────────────────────────────────── */
+  .output-panel { border-right: none; }
+  .output-actions { display: flex; gap: 8px; }
+  .btn-copy {
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text2);
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: color .2s, border-color .2s;
+  }
+  .btn-copy:hover { color: var(--text); border-color: var(--text2); }
+  .btn-clear {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text2);
+    font-size: 12px;
+    cursor: pointer;
+    transition: color .2s, border-color .2s;
+  }
+  .btn-clear:hover { color: var(--red); border-color: var(--red); }
+
+  /* ── Steps ────────────────────────────────────────────────────── */
+  #steps-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .step {
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    animation: slideIn .25s ease;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .step-header {
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+  }
+  .step-body {
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.65;
+    border-top: 1px solid var(--border);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  /* Step colour variants */
+  .step-info    .step-header { background: rgba(56,139,253,.08);  color: var(--blue);   }
+  .step-thought .step-header { background: rgba(57,197,207,.08);  color: var(--cyan);   }
+  .step-tool    .step-header { background: rgba(210,153,34,.08);  color: var(--yellow); }
+  .step-result  .step-header { background: rgba(56,139,253,.06);  color: var(--text2);  }
+  .step-error   .step-header { background: rgba(248,81,73,.1);    color: var(--red);    }
+
+  /* ── Final output ─────────────────────────────────────────────── */
+  .final-card {
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    animation: slideIn .3s ease;
+  }
+  .final-card-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+  }
+  .badge-fix    { background: rgba(35,134,54,.2);  color: var(--accent); border: 1px solid rgba(35,134,54,.4); }
+  .badge-report { background: rgba(210,153,34,.15); color: var(--yellow); border: 1px solid rgba(210,153,34,.3); }
+  .final-card-header.fix    { background: rgba(35,134,54,.05); border-bottom: 1px solid rgba(35,134,54,.2); }
+  .final-card-header.report { background: rgba(210,153,34,.05); border-bottom: 1px solid rgba(210,153,34,.2); }
+  .final-body {
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 420px;
+    overflow-y: auto;
+    background: var(--bg);
+  }
+  /* Diff coloring */
+  .diff-line-add  { color: #7ee787; display: block; }
+  .diff-line-del  { color: var(--red);  display: block; }
+  .diff-line-hunk { color: var(--cyan); display: block; }
+  .diff-line-meta { color: var(--text2); display: block; }
+  .diff-line-ctx  { color: var(--text); display: block; }
+
+  /* ── Loading spinner ──────────────────────────────────────────── */
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text2);
+    font-size: 13px;
+    padding: 20px 0;
+  }
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Empty state ──────────────────────────────────────────────── */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text2);
+    padding: 40px;
+    text-align: center;
+  }
+  .empty-icon { font-size: 40px; opacity: .4; }
+  .empty-state h3 { font-size: 15px; color: var(--text); font-weight: 600; }
+  .empty-state p  { font-size: 13px; max-width: 280px; line-height: 1.55; }
+
+  /* ── Status bar ──────────────────────────────────────────────── */
+  footer {
+    height: 26px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: rgba(255,255,255,.85);
+    flex-shrink: 0;
+    gap: 16px;
+  }
+  .footer-left, .footer-right { display: flex; align-items: center; gap: 16px; }
+  footer span { display: flex; align-items: center; gap: 5px; }
+
+  /* ── Toast ────────────────────────────────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 40px;
+    right: 24px;
+    padding: 10px 18px;
+    background: var(--panel2);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 999;
+    animation: fadeInUp .25s ease;
+    box-shadow: 0 4px 20px rgba(0,0,0,.5);
+  }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Responsive ───────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    .panel { border-right: none; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Navbar ───────────────────────────────────────────────────────── -->
+<nav>
+  <div class="nav-logo">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/>
+    </svg>
+    DevOps Triage Agent
+  </div>
+  <div class="nav-right">
+    <div class="status-dot">
+      <span class="dot"></span>
+      Agent Online
+    </div>
+    <a class="btn-gh" href="https://github.com/Abhishek0905Sharma/devops-triage-agent" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<!-- ── Main grid ─────────────────────────────────────────────────────── -->
+<main>
+  <!-- Left: Input panel -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Submit Incident</span>
+    </div>
+    <div class="panel-body">
+      <div>
+        <label style="margin-bottom:10px">Preset Error Scenarios</label>
+        <div class="preset-grid">
+          <button class="preset-btn red" id="preset1" onclick="loadPreset(1)">
+            <span class="preset-tag tag-red">NameError</span>
+            Bug 1: Undefined variable typo
+          </button>
+          <button class="preset-btn yellow" id="preset2" onclick="loadPreset(2)">
+            <span class="preset-tag tag-yellow">AttributeError</span>
+            Bug 2: Missing null check
+          </button>
+          <button class="preset-btn blue" id="preset3" onclick="loadPreset(3)">
+            <span class="preset-tag tag-blue">LogicBug</span>
+            Bug 3: Wrong comparison operator
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label for="error-input">Error Log JSON</label>
+        <textarea id="error-input" spellcheck="false" placeholder='Paste Sentry/error JSON here, or click a preset above...'></textarea>
+      </div>
+
+      <button class="btn-run" id="run-btn" onclick="runTriage()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Run Triage
+      </button>
+    </div>
+  </div>
+
+  <!-- Right: Output panel -->
+  <div class="panel output-panel">
+    <div class="panel-header">
+      <span class="panel-title">Agent Analysis</span>
+      <div class="output-actions">
+        <button class="btn-copy" id="copy-btn" onclick="copyOutput()" style="display:none">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy Output
+        </button>
+        <button class="btn-clear" onclick="clearOutput()">✕</button>
+      </div>
+    </div>
+    <div class="panel-body" id="output-panel">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">🤖</div>
+        <h3>Ready to Triage</h3>
+        <p>Select a preset error scenario or paste a Sentry error log, then click <strong>Run Triage</strong> to watch the agent think.</p>
+      </div>
+      <div id="steps-container" style="display:none"></div>
+    </div>
+  </div>
+</main>
+
+<!-- ── Status bar ────────────────────────────────────────────────────── -->
+<footer>
+  <div class="footer-left">
+    <span>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      <span id="status-endpoint">Endpoint: POST /triage</span>
+    </span>
+  </div>
+  <div class="footer-right">
+    <span id="status-time"></span>
+    <span>Claude Tool-Use · SSE Streaming</span>
+  </div>
+</footer>
+
+<script>
+// ── Preset payloads ──────────────────────────────────────────────────────────
+const PRESETS = {
+  1: {
+    "event_id": "8c0a8cf5c6354b9d99723be6ea684d0b",
+    "timestamp": "2026-06-11T21:45:00Z",
+    "error_type": "NameError",
+    "message": "name 'updted_user' is not defined",
+    "file_path": "buggy_app/services/users.py",
+    "line_number": 50,
+    "function_name": "update_user",
+    "stack_trace": "File \"buggy_app/routers/users.py\", line 38, in update_user\n    updated_user = user_service.update_user(user_id, update_data)\n  File \"buggy_app/services/users.py\", line 50, in update_user\n    return updted_user\nNameError: name 'updted_user' is not defined",
+    "context": {"user_id": 1, "update_data": {"username": "alice_updated"}}
+  },
+  2: {
+    "event_id": "f516a22f7b884d0590a3ea1496a7efcc",
+    "timestamp": "2026-06-11T21:46:12Z",
+    "error_type": "AttributeError",
+    "message": "'NoneType' object has no attribute 'bio'",
+    "file_path": "buggy_app/routers/users.py",
+    "line_number": 28,
+    "function_name": "get_user_bio",
+    "stack_trace": "File \"buggy_app/routers/users.py\", line 28, in get_user_bio\n    return {\"username\": user.username, \"bio\": user.profile.bio}\nAttributeError: 'NoneType' object has no attribute 'bio'",
+    "context": {"user_id": 2}
+  },
+  3: {
+    "event_id": "bc89fa6e890c4fb98ad16e88fa765fe1",
+    "timestamp": "2026-06-11T21:48:30Z",
+    "error_type": "LogicBugAlert",
+    "message": "User registration anomaly: POST /users rejects all new emails with 'Email is already registered'",
+    "file_path": "buggy_app/services/users.py",
+    "line_number": 16,
+    "function_name": "is_email_taken",
+    "stack_trace": "Non-crashing anomaly alert.\nSymptons: POST /users always returns 400 Bad Request 'Email is already registered'.",
+    "context": {"attempted_registration": {"username": "newuser", "email": "newuser@example.com"}}
+  }
+};
+
+// ── State ────────────────────────────────────────────────────────────────────
+let startTime = null;
+let timerInterval = null;
+let finalContent = '';
+let activePreset = null;
+
+// ── Preset loading ────────────────────────────────────────────────────────────
+function loadPreset(n) {
+  document.getElementById('error-input').value = JSON.stringify(PRESETS[n], null, 2);
+  [1,2,3].forEach(i => document.getElementById(`preset${i}`).classList.toggle('active', i === n));
+  activePreset = n;
+}
+
+// Load preset 1 by default on page load
+window.addEventListener('DOMContentLoaded', () => loadPreset(1));
+
+// ── Triage runner ─────────────────────────────────────────────────────────────
+async function runTriage() {
+  const raw = document.getElementById('error-input').value.trim();
+  if (!raw) { showToast('⚠ Paste an error log first.'); return; }
+
+  let errorLog;
+  try { errorLog = JSON.parse(raw); }
+  catch(e) { showToast('⚠ Invalid JSON — check the input.'); return; }
+
+  // Reset UI
+  clearOutput(true);
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('steps-container').style.display = 'flex';
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('status-endpoint').textContent = 'Endpoint: POST /triage';
+
+  // Start timer
+  startTime = Date.now();
+  timerInterval = setInterval(() => {
+    const s = ((Date.now() - startTime) / 1000).toFixed(1);
+    document.getElementById('status-time').textContent = `⏱ ${s}s elapsed`;
+  }, 100);
+
+  // Loading indicator
+  appendStep('info', '⚡ Running', 'Connecting to triage agent...');
+
+  try {
+    const resp = await fetch('/triage', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: raw
+    });
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const evt = JSON.parse(line.slice(6));
+            handleEvent(evt);
+          } catch(e) {}
+        }
+      }
+    }
+  } catch(err) {
+    appendStep('error', '✕ Error', `Failed to reach /triage: ${err.message}\nRunning in browser demo mode is not supported — ensure the server is running.`);
+  } finally {
+    stopTimer();
+    document.getElementById('run-btn').disabled = false;
+  }
+}
+
+// ── SSE event handler ─────────────────────────────────────────────────────────
+function handleEvent(evt) {
+  switch(evt.type) {
+    case 'info':
+      appendStep('info', '▸ Info', evt.text);
+      break;
+    case 'thought':
+      appendStep('thought', '🧠 Reasoning', evt.text);
+      break;
+    case 'tool_call':
+      const argsStr = JSON.stringify(evt.input || {});
+      appendStep('tool', '⚡ Tool Call', `${evt.name}(${truncate(argsStr, 200)})`);
+      break;
+    case 'tool_result':
+      appendStep('result', '↩ Result', truncate(evt.text, 300));
+      break;
+    case 'error':
+      appendStep('error', '✕ Error', evt.text);
+      break;
+    case 'final':
+      renderFinal(evt.outcome, evt.content);
+      finalContent = evt.content;
+      document.getElementById('copy-btn').style.display = 'flex';
+      break;
+    case 'done':
+      stopTimer();
+      break;
+  }
+  // Auto-scroll output panel
+  const panel = document.getElementById('output-panel');
+  panel.scrollTop = panel.scrollHeight;
+}
+
+// ── DOM helpers ───────────────────────────────────────────────────────────────
+function appendStep(type, header, body) {
+  const container = document.getElementById('steps-container');
+  const step = document.createElement('div');
+  step.className = `step step-${type}`;
+  step.innerHTML = `
+    <div class="step-header">${header}</div>
+    <div class="step-body">${escHtml(body)}</div>
+  `;
+  container.appendChild(step);
+}
+
+function renderFinal(outcome, content) {
+  const container = document.getElementById('steps-container');
+  const card = document.createElement('div');
+  card.className = 'final-card';
+  const label = outcome === 'fix' ? 'Auto-Fix Proposed' : 'Triage Report';
+  const badgeClass = outcome === 'fix' ? 'badge-fix' : 'badge-report';
+  const headerClass = outcome;
+  const icon = outcome === 'fix' ? '🔧' : '📋';
+
+  let bodyHtml;
+  if (outcome === 'fix') {
+    bodyHtml = renderDiff(content);
+  } else {
+    bodyHtml = `<pre>${escHtml(content)}</pre>`;
+  }
+
+  card.innerHTML = `
+    <div class="final-card-header ${headerClass}">
+      <span style="font-size:18px">${icon}</span>
+      <span class="badge ${badgeClass}">${label}</span>
+    </div>
+    <div class="final-body">${bodyHtml}</div>
+  `;
+  container.appendChild(card);
+}
+
+function renderDiff(diff) {
+  return diff.split('\n').map(line => {
+    if (line.startsWith('+') && !line.startsWith('+++'))
+      return `<span class="diff-line-add">${escHtml(line)}</span>`;
+    if (line.startsWith('-') && !line.startsWith('---'))
+      return `<span class="diff-line-del">${escHtml(line)}</span>`;
+    if (line.startsWith('@@'))
+      return `<span class="diff-line-hunk">${escHtml(line)}</span>`;
+    if (line.startsWith('diff') || line.startsWith('index') || line.startsWith('+++') || line.startsWith('---'))
+      return `<span class="diff-line-meta">${escHtml(line)}</span>`;
+    return `<span class="diff-line-ctx">${escHtml(line)}</span>`;
+  }).join('\n');
+}
+
+function clearOutput(keepLoader = false) {
+  if (!keepLoader) {
+    document.getElementById('empty-state').style.display = 'flex';
+    document.getElementById('steps-container').style.display = 'none';
+    document.getElementById('copy-btn').style.display = 'none';
+    document.getElementById('status-time').textContent = '';
+  }
+  document.getElementById('steps-container').innerHTML = '';
+  finalContent = '';
+  stopTimer();
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    if (startTime) {
+      const s = ((Date.now() - startTime) / 1000).toFixed(2);
+      document.getElementById('status-time').textContent = `✓ Completed in ${s}s`;
+    }
+  }
+}
+
+function copyOutput() {
+  if (!finalContent) return;
+  navigator.clipboard.writeText(finalContent).then(() => showToast('✓ Copied to clipboard!'));
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function truncate(s, max) {
+  return s.length > max ? s.slice(0, max) + '…' : s;
+}
+</script>
+</body>
+</html>
